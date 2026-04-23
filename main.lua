@@ -3,6 +3,8 @@ require "import"
 import "java.net.URL"
 import "java.lang.Thread"
 import "java.lang.Runnable"
+ import "java.util.Map"
+ import "java.util.Iterator"
 import "android.widget.ArrayAdapter"
 import "android.widget.Button"
 
@@ -61,6 +63,9 @@ end
 -- connectToServer
 connectToServer.setOnClickListener{
 onClick = function()
+listAdapter.clear()
+listAdapter.add("Connecting...")
+listAdapter.notifyDataSetChanged()
 local text = edit_text.getText().toString()
 
 if text == "" then
@@ -82,19 +87,78 @@ return URL(text)
 end)
 
 if success then
+
 local ok, content = pcall(function()
+
+local maxRedirect = 5
+local redirect = 0
+local connection
+
+while true do
 local connection = URLObj.openConnection()
 connection.setConnectTimeout(5000)
+connection.setReadTimeout(5000)
+connection.connect()
 
-return {
+local code = connection.getResponseCode()
+
+if code == 301 or code == 302 or code == 307 then
+local newURL = connection.getHeaderField("Location")
+
+if newURL ~= nil and redirect < maxRedirect then
+ URLObj = URL(newURL)
+redirect = redirect + 1
+else
+break
+end
+else
+break
+end
+end
+
+
+local contents = {
 "URL: " .. tostring(connection.getURL()),
  "ReadTimeout: " .. tostring(connection.getReadTimeout()),
  "LastModified: " .. tostring(connection.getLastModified()),
  "IfModifiedSince: " .. tostring(connection.getIfModifiedSince()),
  "ContentType: " .. tostring(connection.getContentType()),
  "UseCaches: " .. tostring(connection.getUseCaches()),
- "HeaderFields: " .. tostring(connection.getHeaderFields())
 }
+
+pcall(function()
+local code = connection.getResponseCode()
+local msg = connection.getResponseMessage()
+table.insert(contents, 1, "Code: " .. code .. ",  Message: " .. msg)
+end)
+
+ local headerFields = connection.getHeaderFields()
+local entrySet = headerFields.entrySet()
+local iterator = entrySet.iterator()
+
+while iterator.hasNext() do
+local entry = iterator.next()
+
+local key = entry.getKey()
+local value = entry.getValue()
+
+if key ~= nil and value ~= nil then
+local variableStr = ""
+
+for i = 0, value.size() - 1 do
+ variableStr = variableStr .. tostring(value.get(i))
+
+if i < value.size() - 1 then
+variableStr = variableStr .. ", "
+end
+end
+
+table.insert(contents, key .. ": " .. tostring(variableStr))
+
+end
+end
+
+return contents
 end)
 
 if not ok then
